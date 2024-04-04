@@ -12,7 +12,6 @@ import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Component;
-
 import java.util.UUID;
 
 /**

@@ -49,11 +49,3 @@ rocketmq:
     retry-times-when-send-failed: 1
     retry-times-when-send-async-failed: 1
 
-management:
-  endpoints:
-    web:
-      exposure:
-        include: '*'
-  metrics:
-    tags:
-      application: ${spring.application.name}

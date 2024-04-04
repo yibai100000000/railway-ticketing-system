@@ -19,7 +19,6 @@ import org.opengoofy.index12306.framework.starter.idempotent.enums.IdempotentSce
 import org.opengoofy.index12306.framework.starter.idempotent.enums.IdempotentTypeEnum;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.util.ArrayList;
 import java.util.List;
 
