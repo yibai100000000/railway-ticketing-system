@@ -1,0 +1,60 @@
+package cn.yb100.ticketservice.service.handler.ticket.filter.purchase;
+
+import cn.hutool.core.util.StrUtil;
+import cn.yb100.ticketservice.dto.domain.PurchaseTicketPassengerDetailDTO;
+import cn.yb100.ticketservice.dto.req.PurchaseTicketReqDTO;
+import cn.yb100.ticketservice.service.cache.SeatMarginCacheLoader;
+import lombok.RequiredArgsConstructor;
+import org.opengoofy.index12306.framework.starter.cache.DistributedCache;
+import org.opengoofy.index12306.framework.starter.convention.exception.ClientException;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+import static cn.yb100.ticketservice.common.constant.RedisKeyConstant.TRAIN_STATION_REMAINING_TICKET;
+
+
+/**
+ * 购票流程过滤器之验证列车站点库存是否充足
+ */
+@Component
+@RequiredArgsConstructor
+public class TrainPurchaseTicketParamStockChainHandler implements TrainPurchaseTicketChainFilter<PurchaseTicketReqDTO> {
+
+    private final SeatMarginCacheLoader seatMarginCacheLoader;
+    private final DistributedCache distributedCache;
+
+    @Override
+    public void handler(PurchaseTicketReqDTO requestParam) {
+        // 车次站点是否还有余票。如果用户提交多个乘车人非同一座位类型，拆分验证
+        String keySuffix = StrUtil.join("_", requestParam.getTrainId(), requestParam.getDeparture(), requestParam.getArrival());
+        StringRedisTemplate stringRedisTemplate = (StringRedisTemplate) distributedCache.getInstance();
+        List<PurchaseTicketPassengerDetailDTO> passengerDetails = requestParam.getPassengers();
+        //乘客按车次分组
+        Map<Integer, List<PurchaseTicketPassengerDetailDTO>> seatTypeMap = passengerDetails.stream()
+                .collect(Collectors.groupingBy(PurchaseTicketPassengerDetailDTO::getSeatType));
+        seatTypeMap.forEach((seatType, passengerSeatDetails) -> {
+            Object stockObj = stringRedisTemplate.opsForHash().get(TRAIN_STATION_REMAINING_TICKET + keySuffix, String.valueOf(seatType));
+            //判断每种座位的余票与需求的关系
+            int stock = Optional.ofNullable(stockObj).map(each -> Integer.parseInt(each.toString())).orElseGet(() -> {
+                //缓存为空执行load
+                Map<String, String> seatMarginMap = seatMarginCacheLoader.load(String.valueOf(requestParam.getTrainId()), String.valueOf(seatType), requestParam.getDeparture(), requestParam.getArrival());
+                //这行在lambda表达式里
+                return Optional.ofNullable(seatMarginMap.get(String.valueOf(seatType))).map(Integer::parseInt).orElse(0);
+            });
+            if (stock >= passengerSeatDetails.size()) {
+                return;
+            }
+            throw new ClientException("列车站点已无余票");
+        });
+    }
+
+    @Override
+    public int getOrder() {
+        return 20;
+    }
+}
